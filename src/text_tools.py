@@ -1,6 +1,8 @@
-import json
 import os
+import re
+import json
 import jieba
+import jieba.analyse
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -76,6 +78,16 @@ def segment_text(text):
     joined = [' '.join(words)]
     return joined
 
+def extract_keywords(text, k_ratio=0.25, k_num_max=10):
+    keywords = []
+    sentences = re.split('。|\n|，', text)
+
+    for sentence in sentences:
+        k_num = round(len(sentence) * k_ratio)
+        sentence_keywords = jieba.analyse.extract_tags(sentence, topK=min(k_num, k_num_max)) # get keywords
+        keywords += sentence_keywords
+    return keywords
+
 def build_corpus():
     print('Building corpus...')
     global corpus
@@ -91,8 +103,10 @@ def build_corpus():
         catelog_segmented = segment_text(catelog)
         category_segmented = segment_text(category)
         info_segmented = title_segmented + abstract_segmented + catelog_segmented + category_segmented
-        info_concatenated = ' '.join(list(filter(None, info_segmented)))
-        corpus.append(info_concatenated)
+        info_concatenated = '\n'.join(list(filter(None, info_segmented)))
+        # extract keywords
+        keywords = extract_keywords(info_concatenated)
+        corpus.append(' '.join(keywords))
         # print progress
         print('%.2f' % float(count / length * 100), '%', end = '\r')
 
@@ -132,3 +146,4 @@ if __name__ == '__main__':
     test_text_segmented = ['曹操 三國 演義']
     tfidf = test_tfidf(test_text_segmented)
     print(tfidf)
+    print('tfidf vector length: ', len(tfidf.toarray()[0]))
