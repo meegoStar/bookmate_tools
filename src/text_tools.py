@@ -3,6 +3,7 @@ import re
 import json
 import jieba
 import jieba.analyse
+from gensim.models import word2vec
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -88,7 +89,7 @@ def extract_keywords(text, k_ratio=0.25, k_num_max=10):
         keywords += sentence_keywords
     return keywords
 
-def build_corpus():
+def build_corpus(mode='tfidf'):
     print('Building corpus...')
     global corpus
 
@@ -106,7 +107,11 @@ def build_corpus():
         info_concatenated = '\n'.join(list(filter(None, info_segmented)))
         # extract keywords
         keywords = extract_keywords(info_concatenated)
-        corpus.append(' '.join(keywords))
+        # add to corpus
+        if mode == 'tfidf':
+            corpus.append(' '.join(keywords))
+        elif mode == 'word2vec':
+            corpus.append(keywords)
         # print progress
         print('%.2f' % float(count / length * 100), '%', end = '\r')
 
@@ -122,8 +127,7 @@ def initialize_text_tools():
     set_jieba()
     set_stopwords()
     build_books_dict()
-    build_corpus()
-    train_tfidf()
+    build_corpus(mode='word2vec')
     print('Text-tools initialized.')
 
 def test_tfidf(text_segmented):
@@ -139,11 +143,89 @@ def display_tfidf(tfidf):
         for j in range(len(word)):
             print(word[j], weight[i][j])
 
+def train_word2vec_model():
+    dimension = 250
+    model = word2vec.Word2Vec(corpus, size=dimension)
+
+    # save our model
+    model_path = '../data/250.model.bin'
+    model.save(model_path)
+
+def load_word2vec_model():
+    model_path = '../data/250.model.bin'
+    model = word2vec.Word2Vec.load(model_path)
+    return model
+
+def sentence2vec(sentence_segmented, word2vec_model):
+    sentence_vec = []
+
+    for word in sentence_segmented:
+        if word in word2vec_model.wv.vocab:
+            word_vec = word2vec_model[word]
+            print(word, word_vec)
+            if len(sentence_vec) > 0:
+                sentence_vec += word_vec
+            else:
+                sentence_vec = word_vec
+
+    return sentence_vec
+
+def demo(model):
+    print("提供 3 種測試模式\n")
+    print("輸入一個詞，則去尋找前二十個該詞的相似詞")
+    print("輸入兩個詞，則去計算兩個詞的餘弦相似度")
+    print("輸入三個詞，進行類比推理")
+
+    while True:
+        try:
+            query = input()
+            q_list = query.split()
+
+            if len(q_list) == 1:
+                print("相似詞前 20 排序")
+                res = model.most_similar(q_list[0],topn = 20)
+                for item in res:
+                    print(item[0]+","+str(item[1]))
+
+            elif len(q_list) == 2:
+                print("計算 Cosine 相似度")
+                res = model.similarity(q_list[0],q_list[1])
+                print(res)
+            else:
+                print("%s之於%s，如%s之於" % (q_list[0],q_list[2],q_list[1]))
+                res = model.most_similar([q_list[0],q_list[1]], [q_list[2]], topn= 20)
+                for item in res:
+                    print(item[0]+","+str(item[1]))
+            print("----------------------------")
+        except Exception as e:
+            print(repr(e))
+
 if __name__ == '__main__':
-    # Initialize all needed for text-tools
-    initialize_text_tools()
+    # initialize all needed for text-tools
+    # initialize_text_tools()
+
+    """
+    # Train IDF
+    train_tfidf()
     # Test TF-IDF
     test_text_segmented = ['曹操 三國 演義']
     tfidf = test_tfidf(test_text_segmented)
     print(tfidf)
     print('tfidf vector length: ', len(tfidf.toarray()[0]))
+    """
+    # train word2vec model
+    # word2vec_model = train_word2vec_model()
+
+    # load word2vec model
+    word2vec_model = load_word2vec_model()
+
+    # demo word2vec model
+    test_word_1 = '孔子'
+    test_word_2 = '論語'
+    similarity = word2vec_model.similarity(test_word_1, test_word_2)
+
+    test_sentence_segmented = [test_word_1, test_word_2]
+    sentence_vec = sentence2vec(test_sentence_segmented, word2vec_model)
+    print('sentence_vec', sentence_vec)
+
+    # demo(word2vec_model)
